@@ -13,5 +13,11 @@ utils.o : utils.h
 find_min_max.o : utils.h find_min_max.h
 	$(CC) -o find_min_max.o -c find_min_max.c $(CFLAGS)
 
+process_memory :
+	$(CC) -o proc_mem process_memory.c $(CFLAGS)
+
+zombie :
+	$(CC) -o zomb zombie.c $(CFLAGS)
+
 clean :
 	rm utils.o find_min_max.o
