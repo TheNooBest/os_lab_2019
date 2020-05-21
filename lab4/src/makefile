@@ -13,11 +13,17 @@ utils.o : utils.h
 find_min_max.o : utils.h find_min_max.h
 	$(CC) -o find_min_max.o -c find_min_max.c $(CFLAGS)
 
+sumlibrary.o : sumlibrary.h
+	$(CC) -o sumlibrary.o -c sumlibrary.c $(CFLAGS)
+
 process_memory :
 	$(CC) -o proc_mem process_memory.c $(CFLAGS)
 
 zombie :
 	$(CC) -o zomb zombie.c $(CFLAGS)
 
+parallel_sum : utils.o sumlibrary.o
+	$(CC) -o paral_sum utils.o sumlibrary.o parallel_sum.c $(CFLAGS) -lpthread
+
 clean :
-	rm utils.o find_min_max.o
+	rm utils.o find_min_max.o sumlibrary.o
