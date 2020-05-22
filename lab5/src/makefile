@@ -11,4 +11,7 @@ mutex_another :
 parallel_factorial :
 	$(CC) -o paral_fact parallel_factorial.cpp -lpthread $(CFLAGS)
 
+deadlock :
+	$(CC) -o dlock deadlock.cpp -lpthread $(CFLAGS)
+
 clean :
