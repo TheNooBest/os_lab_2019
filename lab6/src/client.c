@@ -12,6 +12,8 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
+#include "libr.h"
+
 struct Server {
   char ip[255];
   int port;
@@ -30,25 +32,11 @@ uint64_t MultModulo(uint64_t a, uint64_t b, uint64_t mod) {
   return result % mod;
 }
 
-bool ConvertStringToUI64(const char *str, uint64_t *val) {
-  char *end = NULL;
-  unsigned long long i = strtoull(str, &end, 10);
-  if (errno == ERANGE) {
-    fprintf(stderr, "Out of uint64_t range: %s\n", str);
-    return false;
-  }
-
-  if (errno != 0)
-    return false;
-
-  *val = i;
-  return true;
-}
-
 int main(int argc, char **argv) {
   uint64_t k = -1;
   uint64_t mod = -1;
   char servers[255] = {'\0'}; // TODO: explain why 255
+  uint64_t super_answer = 1;
 
   while (true) {
     int current_optind = optind ? optind : 1;
@@ -99,11 +87,29 @@ int main(int argc, char **argv) {
   }
 
   // TODO: for one server here, rewrite with servers from file
-  unsigned int servers_num = 1;
-  struct Server *to = malloc(sizeof(struct Server) * servers_num);
+  unsigned int servers_num = 0;
+  FILE* fp = fopen(servers, "r");
+  char* line = NULL;
+  size_t len = 0;
+  ssize_t read;
+  while (read = getline(&line, &len, fp) != -1) {
+    servers_num++;
+  }
+//   printf("servers_num: %d\n", servers_num);
+  rewind(fp);
+  struct Server* to = (struct Server*)malloc(sizeof(struct Server) * servers_num);
+  for (int i = 0; i < servers_num; i++) {
+    getline(&line, &len, fp);
+    // printf("line: %s\n", line);
+    char * token = strtok(line, ":");
+    memcpy(to[i].ip, token, strlen(token));
+    to[i].port = atoi(strtok(NULL, " "));
+  }
+  fclose(fp);
+//   struct Server *to = (struct Server *)malloc(sizeof(struct Server) * servers_num);
   // TODO: delete this and parallel work between servers
-  to[0].port = 20001;
-  memcpy(to[0].ip, "127.0.0.1", sizeof("127.0.0.1"));
+  // to[0].port = 1234;
+  // memcpy(to[0].ip, "127.0.0.1", sizeof("127.0.0.1"));
 
   // TODO: work continiously, rewrite to make parallel
   for (int i = 0; i < servers_num; i++) {
@@ -129,10 +135,11 @@ int main(int argc, char **argv) {
       exit(1);
     }
 
+    
     // TODO: for one server
     // parallel between servers
-    uint64_t begin = 1;
-    uint64_t end = k;
+    uint64_t begin = k * i / servers_num + 1;
+    uint64_t end = k * (i + 1) / servers_num + 1;
 
     char task[sizeof(uint64_t) * 3];
     memcpy(task, &begin, sizeof(uint64_t));
@@ -144,21 +151,25 @@ int main(int argc, char **argv) {
       exit(1);
     }
 
+    // TODO: from one server
+    // unite results
     char response[sizeof(uint64_t)];
     if (recv(sck, response, sizeof(response), 0) < 0) {
       fprintf(stderr, "Recieve failed\n");
       exit(1);
     }
 
-    // TODO: from one server
-    // unite results
     uint64_t answer = 0;
     memcpy(&answer, response, sizeof(uint64_t));
-    printf("answer: %llu\n", answer);
+    // printf("answer: %lu\n", answer);
+    super_answer *= answer;
+    super_answer %= mod;
 
     close(sck);
   }
   free(to);
+
+  printf("Answer: %lu\n", super_answer);
 
   return 0;
 }

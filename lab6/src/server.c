@@ -11,13 +11,13 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#include "pthread.h"
+#include <pthread.h>
 
-struct FactorialArgs {
-  uint64_t begin;
-  uint64_t end;
-  uint64_t mod;
-};
+#include "libr.h"
+
+// GLOBAL SCOPE
+int64_t res = 1;
+pthread_mutex_t mut = PTHREAD_MUTEX_INITIALIZER;
 
 uint64_t MultModulo(uint64_t a, uint64_t b, uint64_t mod) {
   uint64_t result = 0;
@@ -36,13 +36,28 @@ uint64_t Factorial(const struct FactorialArgs *args) {
   uint64_t ans = 1;
 
   // TODO: your code here
+  for (int i = args->begin; i < args->end; i++) {
+    ans *= i;
+    ans %= args->mod;
+  }
+
+  printf("tmp ans: %lu\n", ans);
+  res *= ans;
+  res %= args->mod;
 
   return ans;
 }
 
 void *ThreadFactorial(void *args) {
   struct FactorialArgs *fargs = (struct FactorialArgs *)args;
-  return (void *)(uint64_t *)Factorial(fargs);
+
+  usleep(10);
+
+  pthread_mutex_lock(&mut);
+  Factorial(fargs);
+  pthread_mutex_unlock(&mut);
+
+  return NULL;
 }
 
 int main(int argc, char **argv) {
@@ -71,6 +86,7 @@ int main(int argc, char **argv) {
         break;
       case 1:
         tnum = atoi(optarg);
+        printf("tnum is: %d\n", tnum);
         // TODO: your code here
         break;
       default:
@@ -91,9 +107,12 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+//   if ( pthread_mutex_init( &mut, NULL) != 0 )
+//     printf( "mutex init failed\n" );
+
   int server_fd = socket(AF_INET, SOCK_STREAM, 0);
   if (server_fd < 0) {
-    fprintf(stderr, "Can not create server socket!");
+    fprintf(stderr, "Can not create server socket!\n");
     return 1;
   }
 
@@ -107,7 +126,8 @@ int main(int argc, char **argv) {
 
   int err = bind(server_fd, (struct sockaddr *)&server, sizeof(server));
   if (err < 0) {
-    fprintf(stderr, "Can not bind to socket!");
+    perror("bind");
+    fprintf(stderr, "Can not bind to socket!\n");
     return 1;
   }
 
@@ -145,7 +165,7 @@ int main(int argc, char **argv) {
         break;
       }
 
-      pthread_t threads[tnum];
+      pthread_t* threads = (pthread_t*)malloc(sizeof(pthread_t) * tnum);
 
       uint64_t begin = 0;
       uint64_t end = 0;
@@ -154,38 +174,40 @@ int main(int argc, char **argv) {
       memcpy(&end, from_client + sizeof(uint64_t), sizeof(uint64_t));
       memcpy(&mod, from_client + 2 * sizeof(uint64_t), sizeof(uint64_t));
 
-      fprintf(stdout, "Receive: %llu %llu %llu\n", begin, end, mod);
+      fprintf(stdout, "Receive: %lu %lu %lu\n", begin, end, mod);
 
-      struct FactorialArgs args[tnum];
+      struct FactorialArgs* args = (struct FactorialArgs*)malloc(sizeof(struct FactorialArgs) * tnum);
       for (uint32_t i = 0; i < tnum; i++) {
         // TODO: parallel somehow
-        args[i].begin = 1;
-        args[i].end = 1;
-        args[i].mod = mod;
+        args[i].begin = (end - begin) * i       / tnum + begin;
+        args[i].end   = (end - begin) * (i + 1) / tnum + begin;
+        args[i].mod   = mod;
 
         if (pthread_create(&threads[i], NULL, ThreadFactorial,
-                           (void *)&args[i])) {
+                           (void *)(args + i))) {
           printf("Error: pthread_create failed!\n");
           return 1;
         }
       }
 
-      uint64_t total = 1;
+      // uint64_t total = 1;
+      res = 1;
       for (uint32_t i = 0; i < tnum; i++) {
-        uint64_t result = 0;
-        pthread_join(threads[i], (void **)&result);
-        total = MultModulo(total, result, mod);
+        pthread_join(threads[i], NULL);
       }
 
-      printf("Total: %llu\n", total);
+      printf("Total: %lu\n", res);
 
-      char buffer[sizeof(total)];
-      memcpy(buffer, &total, sizeof(total));
-      err = send(client_fd, buffer, sizeof(total), 0);
+      // char buffer[sizeof(res)];
+      // memcpy(buffer, &res, sizeof(res));
+      err = send(client_fd, &res, sizeof(res), 0);
       if (err < 0) {
         fprintf(stderr, "Can't send data to client\n");
         break;
       }
+
+      free(threads);
+      free(args);
     }
 
     shutdown(client_fd, SHUT_RDWR);
